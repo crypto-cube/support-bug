@@ -467,6 +467,8 @@ async function submitIssue() {
     }
 
     closeModal();
+    document.getElementById("app").innerHTML = '<p class="loading">&#9203; Refreshing issues&hellip;</p>';
+    await new Promise(r => setTimeout(r, 8000));
     fetchIssues();
   } catch (e) {
     errEl.textContent = e.message;
