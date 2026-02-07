@@ -260,6 +260,67 @@
     font-size: 0.8rem;
     display: none;
   }
+
+  /* ── File Upload ────────────────────────────────── */
+  .drop-zone {
+    border: 2px dashed #30363d;
+    border-radius: 6px;
+    padding: 1rem;
+    text-align: center;
+    font-size: 0.8rem;
+    color: #8b949e;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+
+  .drop-zone:hover,
+  .drop-zone.dragover {
+    border-color: #58a6ff;
+    background: rgba(88,166,255,.06);
+  }
+
+  .file-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .file-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 0.35rem 0.6rem;
+    font-size: 0.8rem;
+    color: #c9d1d9;
+  }
+
+  .file-item .fname {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .file-item .fsize {
+    color: #8b949e;
+    font-size: 0.75rem;
+    white-space: nowrap;
+  }
+
+  .file-item .fremove {
+    background: none;
+    border: none;
+    color: #f85149;
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0 0.15rem;
+  }
+
+  .file-item .fremove:hover { color: #ff7b72; }
 </style>
 </head>
 <body>
@@ -281,6 +342,9 @@
     <div class="modal-body">
       <input id="m-title" type="text" placeholder="Title" />
       <textarea id="m-body" rows="5" placeholder="Description..."></textarea>
+      <div id="m-drop" class="drop-zone">Drop files here or click to browse</div>
+      <input id="m-file" type="file" multiple hidden />
+      <div id="m-files" class="file-list"></div>
       <p id="m-error" class="modal-error"></p>
     </div>
     <div class="modal-foot">
@@ -292,8 +356,9 @@
 
 <script>
 // ── Configure these ─────────────────────────────────
-const REPO  = "";
-const TOKEN = "";
+const REPO        = "";
+const PROXY_URL   = "";   // e.g. https://github-proxy.<you>.workers.dev
+const PROXY_TOKEN = "";   // the secret you set via `wrangler secret put PROXY_TOKEN`
 // ─────────────────────────────────────────────────────
 
 const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;
@@ -324,9 +389,10 @@ function escHtml(s) {
 }
 
 function apiHeaders() {
-  const h = { Accept: "application/vnd.github+json" };
-  if (TOKEN) h.Authorization = "Bearer " + TOKEN;
-  return h;
+  return {
+    Accept: "application/vnd.github+json",
+    Authorization: "Bearer " + PROXY_TOKEN,
+  };
 }
 
 
@@ -335,8 +401,8 @@ function apiHeaders() {
 async function fetchIssues() {
   const app = document.getElementById("app");
 
-  if (!REPO || REPO === "owner/repo") {
-    app.innerHTML = '<p class="error">Set REPO in the script config</p>';
+  if (!REPO || REPO === "owner/repo" || !PROXY_URL) {
+    app.innerHTML = '<p class="error">Set REPO and PROXY_URL in the script config</p>';
     return;
   }
 
@@ -347,7 +413,7 @@ async function fetchIssues() {
     for (const state of ["open", "closed"]) {
       let page = 1;
       while (true) {
-        const url = `https://api.github.com/repos/${REPO}/issues?labels=${encodeURIComponent(LABEL)}&state=${state}&per_page=100&page=${page}`;
+        const url = `${PROXY_URL}/repos/${REPO}/issues?labels=${encodeURIComponent(LABEL)}&state=${state}&per_page=100&page=${page}`;
         const res = await fetch(url, { headers: apiHeaders() });
         if (!res.ok) throw new Error(`GitHub API ${res.status}: ${res.statusText}`);
         const data = await res.json();
@@ -416,12 +482,104 @@ function render(issues) {
   app.innerHTML = html;
 }
 
+// ── Files ────────────────────────────────────────────
+
+let pendingFiles = [];
+
+function initDropZone() {
+  const drop = document.getElementById("m-drop");
+  const input = document.getElementById("m-file");
+
+  drop.addEventListener("click", () => input.click());
+
+  input.addEventListener("change", () => {
+    addFiles(input.files);
+    input.value = "";
+  });
+
+  drop.addEventListener("dragover", e => {
+    e.preventDefault();
+    drop.classList.add("dragover");
+  });
+
+  drop.addEventListener("dragleave", () => drop.classList.remove("dragover"));
+
+  drop.addEventListener("drop", e => {
+    e.preventDefault();
+    drop.classList.remove("dragover");
+    addFiles(e.dataTransfer.files);
+  });
+}
+
+function addFiles(fileList) {
+  for (const f of fileList) {
+    if (pendingFiles.some(p => p.name === f.name && p.size === f.size)) continue;
+    pendingFiles.push(f);
+  }
+  renderFiles();
+}
+
+function removeFile(idx) {
+  pendingFiles.splice(idx, 1);
+  renderFiles();
+}
+
+function renderFiles() {
+  const container = document.getElementById("m-files");
+  if (pendingFiles.length === 0) { container.innerHTML = ""; return; }
+  container.innerHTML = pendingFiles.map((f, i) => {
+    const size = f.size < 1024 ? f.size + " B"
+      : f.size < 1048576 ? (f.size / 1024).toFixed(1) + " KB"
+      : (f.size / 1048576).toFixed(1) + " MB";
+    return `<div class="file-item">
+      <span class="fname">${escHtml(f.name)}</span>
+      <span class="fsize">${size}</span>
+      <button class="fremove" onclick="removeFile(${i})">&times;</button>
+    </div>`;
+  }).join("");
+}
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result.split(",")[1]);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+async function uploadFiles() {
+  const links = [];
+  for (const file of pendingFiles) {
+    const ts = Date.now();
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = `uploads/${ts}-${safeName}`;
+    const content = await readFileAsBase64(file);
+    const res = await fetch(`${PROXY_URL}/repos/${REPO}/contents/${path}`, {
+      method: "PUT",
+      headers: { ...apiHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ message: `upload ${file.name}`, content }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(`Upload failed for ${file.name}: ${err.message || res.status}`);
+    }
+    const data = await res.json();
+    const url = data.content.download_url;
+    const isImage = /\.(png|jpe?g|gif|webp|svg)$/i.test(file.name);
+    links.push(isImage ? `![${file.name}](${url})` : `[${file.name}](${url})`);
+  }
+  return links;
+}
+
 // ── Modal ────────────────────────────────────────────
 
 function openModal() {
   document.getElementById("m-title").value = "";
   document.getElementById("m-body").value = "";
   document.getElementById("m-error").style.display = "none";
+  pendingFiles = [];
+  renderFiles();
   document.getElementById("overlay").classList.add("open");
   document.getElementById("m-title").focus();
 }
@@ -446,8 +604,8 @@ async function submitIssue() {
     errEl.style.display = "block";
     return;
   }
-  if (!TOKEN) {
-    errEl.textContent = "A GitHub token is required to create issues. Set TOKEN in the script config.";
+  if (!PROXY_TOKEN) {
+    errEl.textContent = "A proxy token is required to create issues. Set PROXY_TOKEN in the script config.";
     errEl.style.display = "block";
     return;
   }
@@ -456,10 +614,21 @@ async function submitIssue() {
   btn.textContent = "Creating...";
 
   try {
-    const res = await fetch(`https://api.github.com/repos/${REPO}/issues`, {
+    let fileLinks = [];
+    if (pendingFiles.length) {
+      btn.textContent = `Uploading ${pendingFiles.length} file(s)...`;
+      fileLinks = await uploadFiles();
+    }
+
+    const fullBody = fileLinks.length
+      ? (body ? body + "\n\n" : "") + "**Attachments**\n" + fileLinks.join("\n")
+      : body;
+
+    btn.textContent = "Creating issue...";
+    const res = await fetch(`${PROXY_URL}/repos/${REPO}/issues`, {
       method: "POST",
       headers: { ...apiHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify({ title, body, labels: [LABEL] }),
+      body: JSON.stringify({ title, body: fullBody, labels: [LABEL] }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -480,6 +649,7 @@ async function submitIssue() {
 }
 
 // ── Init ─────────────────────────────────────────────
+initDropZone();
 fetchIssues();
 </script>
 </body>
