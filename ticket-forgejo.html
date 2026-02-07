@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Support Bug Tracker</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    min-height: 100vh;
+    padding: 2rem;
+  }
+
+  header {
+    max-width: 900px;
+    margin: 0 auto 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  header h1 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: #e6edf3;
+  }
+
+  .btn-new {
+    background: #238636;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 0.45rem 1rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+    font-weight: 500;
+  }
+
+  .btn-new:hover { background: #2ea043; }
+
+  .stats {
+    max-width: 900px;
+    margin: 0 auto 1.5rem;
+    display: flex;
+    gap: 1rem;
+  }
+
+  .stat {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 0.75rem 1.25rem;
+    font-size: 0.8rem;
+    color: #8b949e;
+  }
+
+  .stat strong {
+    font-size: 1.2rem;
+    display: block;
+    margin-bottom: 0.15rem;
+    color: #e6edf3;
+  }
+
+  #issues {
+    max-width: 900px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    background: #30363d;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .issue {
+    display: grid;
+    grid-template-columns: 2.5rem 1fr auto;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: #161b22;
+    text-decoration: none;
+    transition: background 0.15s;
+  }
+
+  .issue:hover { background: #1c2129; }
+
+  .icon {
+    font-size: 1.25rem;
+    text-align: center;
+    line-height: 1;
+  }
+
+  .body { min-width: 0; }
+
+  .title {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #e6edf3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .meta {
+    font-size: 0.75rem;
+    color: #8b949e;
+    margin-top: 0.15rem;
+  }
+
+  .age {
+    font-size: 0.75rem;
+    color: #8b949e;
+    white-space: nowrap;
+    text-align: right;
+  }
+
+  .empty, .error, .loading {
+    max-width: 900px;
+    margin: 0 auto;
+    text-align: center;
+    color: #8b949e;
+    padding: 3rem 1rem;
+    font-size: 0.9rem;
+  }
+
+  .error { color: #f85149; }
+
+  .legend {
+    max-width: 900px;
+    margin: 1.5rem auto 0;
+    display: flex;
+    gap: 1.5rem;
+    font-size: 0.75rem;
+    color: #8b949e;
+  }
+
+  .legend span { display: flex; align-items: center; gap: 0.35rem; }
+
+  /* ── Modal ─────────────────────────────────────── */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .15s;
+  }
+
+  .overlay.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .modal {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    width: 560px;
+    max-height: 90vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid #30363d;
+  }
+
+  .modal-head h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #e6edf3;
+  }
+
+  .modal-close {
+    background: none;
+    border: none;
+    color: #8b949e;
+    font-size: 1.3rem;
+    cursor: pointer;
+    line-height: 1;
+  }
+
+  .modal-close:hover { color: #e6edf3; }
+
+  .modal-body {
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .modal-body input,
+  .modal-body textarea {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    color: #c9d1d9;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+    font-family: inherit;
+    outline: none;
+    resize: vertical;
+  }
+
+  .modal-body input:focus,
+  .modal-body textarea:focus { border-color: #58a6ff; }
+
+
+  .modal-foot {
+    padding: 0.75rem 1.25rem;
+    border-top: 1px solid #30363d;
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+  }
+
+  .btn-cancel {
+    background: #21262d;
+    color: #c9d1d9;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 0.45rem 1rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+
+  .btn-cancel:hover { background: #30363d; }
+
+  .btn-submit {
+    background: #238636;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 0.45rem 1rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+    font-weight: 500;
+  }
+
+  .btn-submit:hover { background: #2ea043; }
+  .btn-submit:disabled { opacity: .5; cursor: not-allowed; }
+
+  .modal-error {
+    color: #f85149;
+    font-size: 0.8rem;
+    display: none;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>support-bug tracker</h1>
+  <button class="btn-new" onclick="openModal()">+ New Issue</button>
+</header>
+
+<div id="app"></div>
+
+<!-- ── New Issue Modal ────────────────────────────── -->
+<div id="overlay" class="overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>New Issue</h2>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <input id="m-title" type="text" placeholder="Title" />
+      <textarea id="m-body" rows="5" placeholder="Description..."></textarea>
+      <p id="m-error" class="modal-error"></p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-submit" id="btn-submit" onclick="submitIssue()">Create Issue</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Configure these ─────────────────────────────────
+const INSTANCE = "";   // e.g. "https://codeberg.org" (no trailing slash)
+const REPO     = "";   // e.g. "owner/repo"
+const TOKEN    = "";   // Forgejo Personal Access Token
+// ─────────────────────────────────────────────────────
+
+const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;
+const LABEL    = "support-bug";
+const API_BASE = `${INSTANCE}/api/v1`;
+
+// Cache the label ID so we only look it up once
+let labelIdCache = null;
+
+// ── Helpers ──────────────────────────────────────────
+
+function daysAgo(dateStr) {
+  const ms = Date.now() - new Date(dateStr).getTime();
+  const d = Math.floor(ms / (1000 * 60 * 60 * 24));
+  if (d === 0) return "today";
+  if (d === 1) return "1 day ago";
+  return d + " days ago";
+}
+
+function icon(issue) {
+  if (issue.state === "closed") return '<span class="icon" style="color:#3fb950">&#10003;</span>';
+  const age = Date.now() - new Date(issue.created_at).getTime();
+  if (age > ONE_WEEK) return '<span class="icon" style="color:#f85149">&#9203;</span>';
+  return '<span class="icon" style="color:#d29922">&#9203;</span>';
+}
+
+function escHtml(s) {
+  const d = document.createElement("div");
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function apiHeaders() {
+  const h = { Accept: "application/json" };
+  if (TOKEN) h.Authorization = "token " + TOKEN;
+  return h;
+}
+
+// ── Label ID lookup (Forgejo needs numeric IDs) ─────
+
+async function getLabelId() {
+  if (labelIdCache !== null) return labelIdCache;
+
+  let page = 1;
+  while (true) {
+    const url = `${API_BASE}/repos/${REPO}/labels?limit=50&page=${page}`;
+    const res = await fetch(url, { headers: apiHeaders() });
+    if (!res.ok) throw new Error(`Forgejo API ${res.status}: ${res.statusText}`);
+    const labels = await res.json();
+    if (labels.length === 0) break;
+    const match = labels.find(l => l.name === LABEL);
+    if (match) {
+      labelIdCache = match.id;
+      return labelIdCache;
+    }
+    if (labels.length < 50) break;
+    page++;
+  }
+  return null;
+}
+
+// ── Fetch & Render ───────────────────────────────────
+
+async function fetchIssues() {
+  const app = document.getElementById("app");
+
+  if (!INSTANCE || !REPO) {
+    app.innerHTML = '<p class="error">Set INSTANCE and REPO in the script config</p>';
+    return;
+  }
+
+  app.innerHTML = '<p class="loading">loading&hellip;</p>';
+
+  try {
+    let all = [];
+    for (const state of ["open", "closed"]) {
+      let page = 1;
+      while (true) {
+        const url = `${API_BASE}/repos/${REPO}/issues?labels=${encodeURIComponent(LABEL)}&state=${state}&type=issues&limit=50&page=${page}`;
+        const res = await fetch(url, { headers: apiHeaders() });
+        if (!res.ok) throw new Error(`Forgejo API ${res.status}: ${res.statusText}`);
+        const data = await res.json();
+        if (data.length === 0) break;
+        all = all.concat(data);
+        if (data.length < 50) break;
+        page++;
+      }
+    }
+
+    all.sort((a, b) => {
+      const order = { open: 0, closed: 1 };
+      if (order[a.state] !== order[b.state]) return order[a.state] - order[b.state];
+      return new Date(b.created_at) - new Date(a.created_at);
+    });
+
+    render(all);
+  } catch (e) {
+    app.innerHTML = `<p class="error">${escHtml(e.message)}</p>`;
+  }
+}
+
+function render(issues) {
+  const app = document.getElementById("app");
+
+  if (issues.length === 0) {
+    app.innerHTML = '<p class="empty">No issues with label <strong>support-bug</strong></p>';
+    return;
+  }
+
+  const open = issues.filter(i => i.state === "open");
+  const closed = issues.filter(i => i.state === "closed");
+  const stale = open.filter(i => Date.now() - new Date(i.created_at).getTime() > ONE_WEEK);
+
+  let html = `
+    <div class="stats">
+      <div class="stat"><strong>${issues.length}</strong>total</div>
+      <div class="stat"><strong>${open.length}</strong>open</div>
+      <div class="stat"><strong>${stale.length}</strong>stale (&gt;7d)</div>
+      <div class="stat"><strong>${closed.length}</strong>closed</div>
+    </div>
+    <div id="issues">`;
+
+  for (const issue of issues) {
+    const titleColor = issue.state === "closed" ? "#3fb950"
+      : Date.now() - new Date(issue.created_at).getTime() > ONE_WEEK ? "#f85149"
+      : "#e6edf3";
+    html += `
+      <a class="issue" href="${issue.html_url}" target="_blank" rel="noopener">
+        ${icon(issue)}
+        <div class="body">
+          <div class="title" style="color:${titleColor}">#${issue.number} ${escHtml(issue.title)}</div>
+          <div class="meta">${escHtml(issue.user.login)} &middot; ${daysAgo(issue.created_at)}</div>
+        </div>
+        <div class="age">${issue.state}</div>
+      </a>`;
+  }
+
+  html += `</div>
+    <div class="legend">
+      <span style="color:#3fb950">&#10003; closed</span>
+      <span style="color:#d29922">&#9203; open &lt; 7 days</span>
+      <span style="color:#f85149">&#9203; open &gt; 7 days</span>
+    </div>`;
+
+  app.innerHTML = html;
+}
+
+// ── Modal ────────────────────────────────────────────
+
+function openModal() {
+  document.getElementById("m-title").value = "";
+  document.getElementById("m-body").value = "";
+  document.getElementById("m-error").style.display = "none";
+  document.getElementById("overlay").classList.add("open");
+  document.getElementById("m-title").focus();
+}
+
+function closeModal() {
+  document.getElementById("overlay").classList.remove("open");
+}
+
+// ── Submit ───────────────────────────────────────────
+
+async function submitIssue() {
+  const title = document.getElementById("m-title").value.trim();
+  const body = document.getElementById("m-body").value.trim();
+  const errEl = document.getElementById("m-error");
+  const btn = document.getElementById("btn-submit");
+
+  errEl.style.display = "none";
+
+  if (!title) {
+    errEl.textContent = "Title is required.";
+    errEl.style.display = "block";
+    return;
+  }
+  if (!TOKEN) {
+    errEl.textContent = "A Forgejo PAT is required to create issues. Set TOKEN in the script config.";
+    errEl.style.display = "block";
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "Creating...";
+
+  try {
+    // Resolve label name → numeric ID (Forgejo requires IDs on create)
+    const labelId = await getLabelId();
+    const payload = { title, body };
+    if (labelId !== null) payload.labels = [labelId];
+
+    const res = await fetch(`${API_BASE}/repos/${REPO}/issues`, {
+      method: "POST",
+      headers: { ...apiHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || `Forgejo API ${res.status}`);
+    }
+
+    closeModal();
+    fetchIssues();
+  } catch (e) {
+    errEl.textContent = e.message;
+    errEl.style.display = "block";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Create Issue";
+  }
+}
+
+// ── Init ─────────────────────────────────────────────
+fetchIssues();
+</script>
+</body>
+</html>
